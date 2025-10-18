@@ -50,4 +50,9 @@ jobs:
       run: |
         kubectl get all
         kubectl describe deployment nodejs-app
-        kubectl logs -l app=nodejs-app --tail=50
+        
+    - name: Show application logs
+      if: always()
+      run: |
+        POD_NAME=$(kubectl get pods -l app=nodejs-app -o jsonpath='{.items[0].metadata.name}')
+        kubectl logs $POD_NAME --tail=50 || echo "Could not fetch logs"
