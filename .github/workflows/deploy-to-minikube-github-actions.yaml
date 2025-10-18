@@ -1,30 +1,53 @@
-name: Deploy to Minikube using GitHub Actions
+name: Deploy to Minikube
 
-on: [push]
-  
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
 jobs:
-  job1:
+  deploy:
     runs-on: ubuntu-latest
-    name: build Node.js Docker Image and deploy to minikube
+    
     steps:
-    - uses: actions/checkout@v2
-    - name: Start minikube
-      uses: medyagh/setup-minikube@master
-    - name: Try the cluster !
-      run: kubectl get pods -A
-    - name: Build image
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Minikube
+      uses: medyagh/setup-minikube@latest
+      
+    - name: Build Docker image in Minikube
       run: |
-          export SHELL=/bin/bash
-          eval $(minikube -p minikube docker-env)
-          docker build -f ./Dockerfile -t devopshint/node-app:latest .
-          echo -n "verifying images:"
-          docker images         
-    - name: Deploy to minikube
-      run:
+        eval $(minikube docker-env)
+        docker build -t node-app:local .
+        docker images
+    
+    - name: Deploy to Minikube
+      run: |
         kubectl apply -f k8s-node-app.yaml
         kubectl set image deployment/nodejs-app nodejs-app=node-app:local
-        kubectl wait --for=condition=ready pod -l app=nodejs-app --timeout=60s
-    - name: Test service URLs
+        kubectl patch deployment nodejs-app -p '{"spec":{"template":{"spec":{"containers":[{"name":"nodejs-app","imagePullPolicy":"Never"}]}}}}'
+    
+    - name: Wait for deployment
       run: |
-          minikube service list
-          minikube service nodejs-app --url
+        kubectl rollout status deployment/nodejs-app --timeout=90s
+        kubectl get pods
+        kubectl get services
+    
+    - name: Test service
+      run: |
+        kubectl port-forward service/nodejs-app 8080:80 &
+        sleep 5
+        curl -s http://localhost:8080 | grep "Hello World"
+        
+    - name: Get service URL
+      run: |
+        minikube service nodejs-app --url
+        
+    - name: Show deployment status
+      if: always()
+      run: |
+        kubectl get all
+        kubectl describe deployment nodejs-app
+        kubectl logs -l app=nodejs-app --tail=50
