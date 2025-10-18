@@ -1,51 +1,28 @@
-name: Deploy Node.js app to Minikube
+name: Deploy to Minikube using GitHub Actions
 
-# Trigger workflow on push to main branch
-on:
-  push:
-    branches:
-      - main
-
+on: [push]
+  
 jobs:
-  deploy:
+  job1:
     runs-on: ubuntu-latest
-
+    name: build Node.js Docker Image and deploy to minikube
     steps:
-      # 1. Checkout code
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      # 2. Set up Docker Buildx (optional, for building images)
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v2
-
-      # 3. Set up Minikube
-      - name: Set up Minikube
-        uses: medyagh/setup-minikube@v2
-        with:
-          kubernetes-version: v1.27.3
-          driver: docker
-
-      # 4. Point Docker to Minikube's Docker daemon
-      - name: Use Minikube Docker daemon
-        run: eval $(minikube docker-env)
-
-      # 5. Build Docker image inside Minikube
-      - name: Build Docker image
-        run: docker build -t node-app:latest .
-
-      # 6. Deploy to Kubernetes
-      - name: Apply Kubernetes manifests
-        run: kubectl apply -f k8s-node-app.yaml
-
-      # 7. Wait for pod to be ready
-      - name: Wait for pod
-        run: kubectl wait --for=condition=ready pod -l app=nodejs-app --timeout=120s
-
-      # 8. List services
-      - name: List services
-        run: minikube service list
-
-      # 9. Optional: show pod status
-      - name: Show pods
-        run: kubectl get pods -o wide
+    - uses: actions/checkout@v2
+    - name: Start minikube
+      uses: medyagh/setup-minikube@master
+    - name: Try the cluster !
+      run: kubectl get pods -A
+    - name: Build image
+      run: |
+          export SHELL=/bin/bash
+          eval $(minikube -p minikube docker-env)
+          docker build -f ./Dockerfile -t devopshint/node-app:latest .
+          echo -n "verifying images:"
+          docker images         
+    - name: Deploy to minikube
+      run:
+        kubectl apply -f k8s-node-app.yaml
+    - name: Test service URLs
+      run: |
+          minikube service list
+          minikube service nodejs-app --url
